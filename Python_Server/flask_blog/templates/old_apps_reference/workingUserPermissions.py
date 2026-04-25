@@ -1,14 +1,9 @@
 import os
 
-from flask import Flask, render_template_string, request, flash, render_template
+from flask import Flask, render_template_string
 from flask_sqlalchemy import SQLAlchemy
 from flask_security import Security, SQLAlchemyUserDatastore, auth_required, hash_password
 from flask_security.models import fsqla_v3 as fsqla
-from sqlalchemy.orm import Session, DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import create_engine, ForeignKey, String, update, bindparam
-from typing import List
-from typing import Optional
-
 
 # Create app
 app = Flask(__name__)
@@ -40,52 +35,11 @@ db = SQLAlchemy(app)
 # Define models
 fsqla.FsModels.set_db_info(db)
 
-#### begin new section
-
-class Base(DeclarativeBase):
-    pass
-
-class Hotel(Base):
-    __tablename__ = "Hotel"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(30))
-    booked: Mapped[Optional[bool]] = False
-
-    def __repr__(self) -> str:
-        return f"Hotel(id={self.id!r}, name={self.name!r}, booked={self.booked!r})"
-
-
-#create engine
-engine = create_engine("sqlite://", echo=True)
-
-def create_data():
-    with Session(engine) as session:
-        Marriott = User(
-         name="Marriott",
-         booked=False,
-         Length_booked = 0
-        )
-        Hyatt = User(
-         name="Hyatt",
-         booked=False,
-         Length_booked = 0
-        )
-
-        session.add_all([Marriott, Hyatt])
-
-        session.commit()
-
-
-##### end new section
-
 class Role(db.Model, fsqla.FsRoleMixin):
     pass
 
 class User(db.Model, fsqla.FsUserMixin):
     pass
-
-
 
 # Setup Flask-Security
 user_datastore = SQLAlchemyUserDatastore(db, User, Role)
@@ -95,33 +49,7 @@ security = Security(app, user_datastore)
 @app.route("/")
 @auth_required()
 def home():
-    return render_template('index.html')
-
-@app.route('/create', methods=('GET', 'POST'))
-def create():
-    '''
-    if request.method == 'POST':
-        booking = request.form['Hotel Name']
-        time = request.form['Length of Booking']
-
-        if not booking:
-            flash('Hotel Name is required!')
-        else:
-            stmt = (
-            update(Hotel)
-             .where(Hotel.c.name == bindparam("oldname"))
-            .values(time=bindparam("newname"))
-            )
-            with engine.begin() as conn:
-                conn.execute(
-                stmt,
-                [
-                    {"oldname": booking, "newname": time},
-                ],
-                )
-    '''
-    return render_template('index.html')
-  
+    return render_template_string("Hello {{ current_user.email }}")
 
 # one time setup
 with app.app_context():
@@ -132,6 +60,4 @@ with app.app_context():
     db.session.commit()
 
 if __name__ == '__main__':
-
-    create_data()
     app.run()
