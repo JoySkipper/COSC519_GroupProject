@@ -37,7 +37,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="/Users/wskipper/Documents/GitHub/Python_Server/python-virtual-environments/project_env"
+VIRTUAL_ENV="/Users/wskipper/Documents/GitHub/COSC519_GroupProject/Python_Server/python-virtual-environments/project_env"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
