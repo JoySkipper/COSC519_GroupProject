@@ -16,7 +16,7 @@ PYTHONPATH=. SQLALCHEMY_DATABASE_URI="sqlite:////var/tmp/test.db" \
 import os
 import typing as t
 
-from flask import Flask, abort, current_app, render_template_string
+from flask import Flask, abort, current_app, render_template_string, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_babel import Babel
 from sqlalchemy import Column, ForeignKey, Integer, Text, UnicodeText, create_engine, MetaData, Table
@@ -74,6 +74,14 @@ class Blog(db.Model):
     title = Column(Text)
     text = Column(UnicodeText)
 
+def get_post(post_id):
+    conn = db
+    post = conn.execute('SELECT * FROM posts WHERE id = ?',
+                        (post_id,)).fetchone()
+    conn.close()
+    if post is None:
+        abort(404)
+    return post
 
 # Create app
 def create_app():
@@ -120,8 +128,10 @@ def create_app():
     # we will get a proper '401' and redirected to login page.
     @app.route("/")
     @auth_required()
-    def home():
-        return render_template_string("Hello {{ current_user.email }}")
+    def index():
+        posts = db.execute('SELECT * FROM posts').fetchall()
+        db.close()
+        return render_template('index.html', posts=posts)
 
     @app.route("/admin")
     @auth_required()
@@ -167,6 +177,52 @@ def create_app():
         if not blogs:
             abort(404)
         return render_template_string(f"Found {cnt} of yours with titles {blist}")
+    
+    @app.route('/create', methods=('GET', 'POST'))
+    def create():
+        if request.method == 'POST':
+            title = request.form['title']
+            content = request.form['content']
+
+            if not title:
+                flash('Title is required!')
+            else:
+                conn = db
+                conn.execute('INSERT INTO posts (title, content) VALUES (?, ?)',
+                            (title, content))
+                conn.commit()
+                conn.close()
+                return redirect(url_for('index'))
+        return render_template('create.html')
+    
+    @app.route('/<int:id>/edit', methods=('GET', 'POST'))
+    def edit(id):
+        post = get_post(id)
+
+        if request.method == 'POST':
+            title = request.form['title']
+            content = request.form['content']
+
+            if not title:
+                flash('Title is required!')
+            else:
+                conn = db
+                conn.execute('UPDATE posts SET title = ?, content = ?'
+                            ' WHERE id = ?',
+                            (title, content, id))
+                conn.commit()
+                conn.close()
+                return redirect(url_for('index'))
+            
+    @app.route('/<int:id>/delete', methods=('POST',))
+    def delete(id):
+        post = get_post(id)
+        conn = db
+        conn.execute('DELETE FROM posts WHERE id = ?', (id,))
+        conn.commit()
+        conn.close()
+        flash('"{}" was successfully deleted!'.format(post['title']))
+        return redirect(url_for('index'))
 
     return app
 
@@ -227,4 +283,4 @@ if __name__ == "__main__":
     myapp = create_app()
     with myapp.app_context():
         create_users()
-    myapp.run(port=5003)
+    myapp.run(port=8080)
