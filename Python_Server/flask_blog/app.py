@@ -93,13 +93,13 @@ security = Security(app, user_datastore)
 
 # Views
 @app.route("/")
-@auth_required()
-def home():
+def index():
     return render_template('index.html')
 
 @app.route('/create', methods=('GET', 'POST'))
+@auth_required()
 def create():
-    '''
+    
     if request.method == 'POST':
         booking = request.form['Hotel Name']
         time = request.form['Length of Booking']
@@ -119,8 +119,8 @@ def create():
                     {"oldname": booking, "newname": time},
                 ],
                 )
-    '''
-    return render_template('index.html')
+    
+    return render_template('create.html')
   
 
 # one time setup
