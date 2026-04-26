@@ -5,7 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_security import Security, SQLAlchemyUserDatastore, auth_required, hash_password
 from flask_security.models import fsqla_v3 as fsqla
 from sqlalchemy.orm import Session, DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import create_engine, ForeignKey, String, update, bindparam, MetaData, insert
+from sqlalchemy import create_engine, ForeignKey, String, update, bindparam, MetaData, insert, update
 from typing import List
 from typing import Optional
 
@@ -71,6 +71,7 @@ class Hotel(db.Model):
     def __repr__(self):
         return '<Hotel %r>' % self.name
 
+'''
 def init_db(): 
     db.create_all()
 
@@ -80,6 +81,25 @@ def init_db():
 
     hotels = Hotel.query.all()
     print(hotels)
+'''
+
+
+
+#meta.create_all(engine)
+
+'''
+with engine.connect() as conn:
+    conn.execute(
+        insert(hotel),
+        [
+            {"name": "Marriott", "length_booked": 0},
+            {"name": "Hyatt", "length_booked": 0},
+        ]
+)
+'''
+    
+# Create the profile table
+#meta.create_all(engine)
 
 
 
@@ -106,10 +126,17 @@ def index():
     return render_template('index.html')
 
 @app.route('/create', methods=('GET', 'POST'))
-#@auth_required()
+@auth_required()
 def create():
-    
+    hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
+    striphotelchoices = []
+    for value in hotelchoices: 
+        striphotelchoices.append(value.strip("',()"))
+    hotelchoices = striphotelchoices
+    #for hotelchoice in hotelchoices: 
+    #    print(hotelchoice.name)
     if request.method == 'POST':
+        #### get to work with auth-required, also get to work as a query of database
         #return redirect(url_for('index'))
         #booking = request.form.get("hname")
         #time = request.form.get("hnumber")
@@ -118,14 +145,21 @@ def create():
         if not result:
             flash('Hotel Name is required!')
         else:
-            booking = result.get("hname")
+            booking = result.get("hotelname")
             length_booked = result.get("hnumber")
-            db.session.add(Hotel(booking,length_booked))
-            db.session.commit()
+            
+            #hotelname = Hotel.query.filter_by(name=booking).first()
+            if booking in hotelchoices: 
+                hotelname = Hotel.query.filter_by(name=booking).first()
+                hotelname.length_booked = length_booked
+                db.session.commit()
+            else: 
+                flash('Hotel not in system')
+
             return render_template("result.html", result=result)
         
     
-    return render_template('create.html')
+    return render_template('create.html', hotelchoices = hotelchoices)
   
 
 # one time setup
@@ -136,8 +170,15 @@ with app.app_context():
         security.datastore.create_user(email="test@me.com", password=hash_password("password"))
     db.session.commit()
 
-if __name__ == '__main__':
-    init_db()
+    db.session.add(Hotel('Marriott', 0))
+    db.session.add(Hotel('Hyatt',0))
+    db.session.commit()
 
+    hotels = Hotel.query.all()
+    print(hotels)
+
+if __name__ == '__main__':
+    #init_db()
+    
     #create_data()
     app.run()

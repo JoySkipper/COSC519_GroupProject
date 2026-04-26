@@ -4,11 +4,21 @@
 <h1>{% block title %} Create a New Hotel Booking {% endblock %}</h1>
 
 <form action = "{{ url_for("create")}}" method="post">
+    <!--
     <div class="form-group">
         <label for="title">Hotel Name</label>
         <input type="text" name = "hname"
                placeholder="Post title" class="form-control"></input>
     </div>
+    -->
+
+    <label for="hotelchoices">Choose a Hotel:</label>
+
+    <select name="hotelname" id="hotelchoices">
+        {% for value in hotelchoices %} 
+        <option value="{{ value }}">{{ value }}</option>         
+        {% endfor %} 
+    </select>
     
     <div class="form-group">
         <label for="content">Length of Booking</label>
