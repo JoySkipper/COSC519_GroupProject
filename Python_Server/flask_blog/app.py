@@ -1,11 +1,11 @@
 import os
 
-from flask import Flask, render_template_string, request, flash, render_template
+from flask import Flask, render_template_string, request, flash, render_template, url_for, redirect
 from flask_sqlalchemy import SQLAlchemy
 from flask_security import Security, SQLAlchemyUserDatastore, auth_required, hash_password
 from flask_security.models import fsqla_v3 as fsqla
 from sqlalchemy.orm import Session, DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import create_engine, ForeignKey, String, update, bindparam
+from sqlalchemy import create_engine, ForeignKey, String, update, bindparam, MetaData, insert
 from typing import List
 from typing import Optional
 
@@ -42,39 +42,48 @@ fsqla.FsModels.set_db_info(db)
 
 #### begin new section
 
-class Base(DeclarativeBase):
-    pass
-
-class Hotel(Base):
-    __tablename__ = "Hotel"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(30))
-    booked: Mapped[Optional[bool]] = False
-
-    def __repr__(self) -> str:
-        return f"Hotel(id={self.id!r}, name={self.name!r}, booked={self.booked!r})"
-
-
 #create engine
-engine = create_engine("sqlite://", echo=True)
+engine = db.create_engine("sqlite://", echo=True)
+meta = db.MetaData()
 
-def create_data():
-    with Session(engine) as session:
-        Marriott = User(
-         name="Marriott",
-         booked=False,
-         Length_booked = 0
-        )
-        Hyatt = User(
-         name="Hyatt",
-         booked=False,
-         Length_booked = 0
-        )
+#class Base(DeclarativeBase):
+#    pass
 
-        session.add_all([Marriott, Hyatt])
+'''
+# database name
+hotel = db.Table(
+    'hotel',                                        
+    meta,                                    
+    db.Column('name', db.String, primary_key=True),                  
+    db.Column('length_booked', db.Integer),                
+)
+'''
 
-        session.commit()
+class Hotel(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True)
+    length_booked = db.Column(db.Integer)
+  
+    def __init__(self, name, length_booked):
+        self.name = name
+        self.length_booked = length_booked
+
+    def __repr__(self):
+        return '<Hotel %r>' % self.name
+
+def init_db(): 
+    db.create_all()
+
+    db.session.add(Hotel('Marriott', 0))
+    db.session.add(Hotel('Hyatt',0))
+    db.session.commit()
+
+    hotels = Hotel.query.all()
+    print(hotels)
+
+
+
+
 
 
 ##### end new section
@@ -97,28 +106,24 @@ def index():
     return render_template('index.html')
 
 @app.route('/create', methods=('GET', 'POST'))
-@auth_required()
+#@auth_required()
 def create():
     
     if request.method == 'POST':
-        booking = request.form['Hotel Name']
-        time = request.form['Length of Booking']
-
-        if not booking:
+        #return redirect(url_for('index'))
+        #booking = request.form.get("hname")
+        #time = request.form.get("hnumber")
+        result = request.form
+        #return redirect(url_for('index')
+        if not result:
             flash('Hotel Name is required!')
         else:
-            stmt = (
-            update(Hotel)
-             .where(Hotel.c.name == bindparam("oldname"))
-            .values(time=bindparam("newname"))
-            )
-            with engine.begin() as conn:
-                conn.execute(
-                stmt,
-                [
-                    {"oldname": booking, "newname": time},
-                ],
-                )
+            booking = result.get("hname")
+            length_booked = result.get("hnumber")
+            db.session.add(Hotel(booking,length_booked))
+            db.session.commit()
+            return render_template("result.html", result=result)
+        
     
     return render_template('create.html')
   
@@ -132,6 +137,7 @@ with app.app_context():
     db.session.commit()
 
 if __name__ == '__main__':
+    init_db()
 
-    create_data()
+    #create_data()
     app.run()

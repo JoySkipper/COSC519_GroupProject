@@ -3,18 +3,17 @@
 {% block content %}
 <h1>{% block title %} Create a New Hotel Booking {% endblock %}</h1>
 
-<form method="post">
+<form action = "{{ url_for("create")}}" method="post">
     <div class="form-group">
         <label for="title">Hotel Name</label>
-        <input type="text" name="title"
-               placeholder="Post title" class="form-control"
-               value="{{ request.form['Hotel Name'] }}"></input>
+        <input type="text" name = "hname"
+               placeholder="Post title" class="form-control"></input>
     </div>
-
+    
     <div class="form-group">
         <label for="content">Length of Booking</label>
-        <input id="time" type="number" value="0"
-                  class="form-control">{{ request.form['Length of Booking'] }}</input>
+        <input name ="hnumber" id="time" type="number" value="0"
+                  class="form-control"></input>
     </div>
     <div class="form-group">
         <button type="submit" class="btn btn-primary">Submit</button>
