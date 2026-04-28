@@ -1,7 +1,12 @@
-<!doctype html> 
-<html> 
-<body> 
-    
+{% extends 'base.html' %}
+
+
+{% block content %}
+
+<head>
+<h1>{% block title %} Your booking has been created! {% endblock %}</h1>
+
+ 
     <table border = 1> 
         {% for key, value in result.items() %} 
         
@@ -12,6 +17,6 @@
             
         {% endfor %} 
     </table> 
+
         
-</body> 
-</html>
+{% endblock %}

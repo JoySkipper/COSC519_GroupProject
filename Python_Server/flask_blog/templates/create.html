@@ -3,14 +3,12 @@
 {% block content %}
 <h1>{% block title %} Create a New Hotel Booking {% endblock %}</h1>
 
-<form action = "{{ url_for("create")}}" method="post">
-    <!--
-    <div class="form-group">
-        <label for="title">Hotel Name</label>
-        <input type="text" name = "hname"
-               placeholder="Post title" class="form-control"></input>
-    </div>
-    -->
+
+
+
+
+
+ <form action = "{{ url_for("create")}}" method="post"></form>
 
     <label for="hotelchoices">Choose a Hotel:</label>
 
@@ -21,12 +19,13 @@
     </select>
     
     <div class="form-group">
-        <label for="content">Length of Booking</label>
+        <label for="content">Length of Booking in Seconds</label>
         <input name ="hnumber" id="time" type="number" value="0"
                   class="form-control"></input>
     </div>
     <div class="form-group">
         <button type="submit" class="btn btn-primary">Submit</button>
     </div>
+
 </form>
 {% endblock %}

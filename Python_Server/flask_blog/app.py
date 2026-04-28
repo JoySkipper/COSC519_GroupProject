@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask, render_template_string, request, flash, render_template, url_for, redirect
+from flask import Flask, render_template_string, request, flash, render_template, url_for, redirect, session, copy_current_request_context
 from flask_sqlalchemy import SQLAlchemy
 from flask_security import Security, SQLAlchemyUserDatastore, auth_required, hash_password
 from flask_security.models import fsqla_v3 as fsqla
@@ -8,6 +8,14 @@ from sqlalchemy.orm import Session, DeclarativeBase, Mapped, mapped_column, rela
 from sqlalchemy import create_engine, ForeignKey, String, update, bindparam, MetaData, insert, update
 from typing import List
 from typing import Optional
+import time
+import threading
+from threading import Lock
+from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
+import sys
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 # Create app
@@ -34,6 +42,13 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 }
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+# Set this variable to "threading", "eventlet" or "gevent" to test the
+# different async modes, or leave it set to None for the application to choose
+# the best option based on installed packages.
+async_mode = None
+
+socketio = SocketIO(app, async_mode=async_mode, logger=True, engineio_logger=True)
+
 # Create database connection object
 db = SQLAlchemy(app)
 
@@ -45,6 +60,8 @@ fsqla.FsModels.set_db_info(db)
 #create engine
 engine = db.create_engine("sqlite://", echo=True)
 meta = db.MetaData()
+thread_lock = Lock()
+thread = None
 
 #class Base(DeclarativeBase):
 #    pass
@@ -101,10 +118,42 @@ with engine.connect() as conn:
 # Create the profile table
 #meta.create_all(engine)
 
+def background_thread():
+    """Example of how to send server generated events to clients."""
+    count = 0
+    while True:
+        socketio.sleep(10)
+        count += 1
+        socketio.emit('my_response',
+                      {'data': 'Server generated event', 'count': count})
+
+
+@socketio.event
+def my_event(message):
+    session['receive_count'] = session.get('receive_count', 0) + 1
+    emit('my_response',
+         {'data': message['data'], 'count': session['receive_count']})
 
 
 
 
+@socketio.event
+def connect():
+    global thread
+    with thread_lock:
+        if thread is None:
+            thread = socketio.start_background_task(background_thread)
+    emit('my_response', {'data': 'Connected', 'count': 0})
+
+
+
+
+def maintain_booking(hotelname, length_booked):
+    time.sleep(length_booked)
+    hotelname.length_booked = 0
+    db.session.commit()
+    #print("finished thread\n",file=sys.stderr)
+  
 
 ##### end new section
 
@@ -124,6 +173,10 @@ security = Security(app, user_datastore)
 @app.route("/")
 def index():
     return render_template('index.html')
+
+@app.route("/reader")
+def reader():
+    return render_template('reader.html')
 
 @app.route('/create', methods=('GET', 'POST'))
 @auth_required()
@@ -153,6 +206,13 @@ def create():
                 hotelname = Hotel.query.filter_by(name=booking).first()
                 hotelname.length_booked = length_booked
                 db.session.commit()
+
+                # now we wait for the length of the booking, then make hotel available again
+                # using a separate thread for this so that the webpage will return result.html and not just wait for the booking to complete
+                threading.Thread(target=maintain_booking, args=(hotelname,int(length_booked)))
+                print("test to console",file=sys.stderr)
+
+
             else: 
                 flash('Hotel not in system')
 
@@ -161,6 +221,7 @@ def create():
     
     return render_template('create.html', hotelchoices = hotelchoices)
   
+
 
 # one time setup
 with app.app_context():
@@ -181,4 +242,4 @@ if __name__ == '__main__':
     #init_db()
     
     #create_data()
-    app.run()
+    socketio.run(app)
