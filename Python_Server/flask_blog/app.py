@@ -181,6 +181,7 @@ def reader():
 @app.route('/create', methods=('GET', 'POST'))
 @auth_required()
 def create():
+    
     hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
     striphotelchoices = []
     for value in hotelchoices: 
@@ -188,7 +189,9 @@ def create():
     hotelchoices = striphotelchoices
     #for hotelchoice in hotelchoices: 
     #    print(hotelchoice.name)
+    
     if request.method == 'POST':
+        
         #### get to work with auth-required, also get to work as a query of database
         #return redirect(url_for('index'))
         #booking = request.form.get("hname")
