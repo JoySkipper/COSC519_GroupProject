@@ -14,12 +14,16 @@ from threading import Lock
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 import sys
 import logging
+import json
 
 logging.basicConfig(level=logging.DEBUG)
 
 
+
+
 # Create app
 app = Flask(__name__)
+#DB_URL = 'postgresql+psycopg2://{user}:{pw}@{url}/{db}'.format(user=POSTGRES_USER,pw=POSTGRES_PW,url=POSTGRES_URL,db=POSTGRES_DB)
 app.config['DEBUG'] = True
 
 # Generate a nice key using secrets.token_urlsafe()
@@ -33,6 +37,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "strict"
 
 # Use an in-memory db
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://'
+#app.config['SQLALCHEMY_DATABASE_URI'] = DB_URL
 # As of Flask-SQLAlchemy 2.4.0 it is easy to pass in options directly to the
 # underlying engine. This option makes sure that DB connections from the
 # pool are still valid. Important for entire application since
@@ -41,6 +46,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
 
 # Set this variable to "threading", "eventlet" or "gevent" to test the
 # different async modes, or leave it set to None for the application to choose
@@ -59,6 +65,7 @@ fsqla.FsModels.set_db_info(db)
 
 #create engine
 engine = db.create_engine("sqlite://", echo=True)
+#engine = db.create_engine(DB_URL, echo=True)
 meta = db.MetaData()
 thread_lock = Lock()
 thread = None
@@ -114,6 +121,21 @@ with engine.connect() as conn:
         ]
 )
 '''
+
+def hotelquery(): 
+    hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
+    striphotelchoices = []
+    for value in hotelchoices: 
+        striphotelchoices.append(value.strip("',()"))
+    hotelchoices = striphotelchoices
+
+    hotelbookings = [str(i) for i in db.session.query(Hotel.length_booked)]
+    striphotelbookings = []
+    for value in hotelbookings: 
+        striphotelbookings.append(value.strip("',()"))
+    hotelbookings = striphotelbookings
+
+    return(hotelchoices, hotelbookings)
     
 # Create the profile table
 #meta.create_all(engine)
@@ -135,6 +157,15 @@ def my_event(message):
          {'data': message['data'], 'count': session['receive_count']})
 
 
+@socketio.event
+def reader_ping():
+    hotelchoices, hotelbookings = hotelquery()
+    #hotelDB = Hotel.query.all()
+    data = dict(zip(hotelchoices,hotelbookings))
+    data = json.dumps(data)
+    JS_data = json.loads(data)
+    emit('reader_data', JS_data)
+
 
 
 @socketio.event
@@ -148,11 +179,14 @@ def connect():
 
 
 
-def maintain_booking(hotelname, length_booked):
-    time.sleep(length_booked)
+def maintain_booking(hname, booktime):
+    time.sleep(booktime)
+    hotelname = Hotel.query.filter_by(name=hname).first()
     hotelname.length_booked = 0
     db.session.commit()
-    #print("finished thread\n",file=sys.stderr)
+    print("test to console",file=sys.stderr)
+
+
   
 
 ##### end new section
@@ -172,6 +206,7 @@ security = Security(app, user_datastore)
 # Views
 @app.route("/")
 def index():
+    #db_name = db.engine.url.database
     return render_template('index.html')
 
 @app.route("/reader")
@@ -182,13 +217,7 @@ def reader():
 @auth_required()
 def create():
     
-    hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
-    striphotelchoices = []
-    for value in hotelchoices: 
-        striphotelchoices.append(value.strip("',()"))
-    hotelchoices = striphotelchoices
-    #for hotelchoice in hotelchoices: 
-    #    print(hotelchoice.name)
+    hotelchoices = hotelquery()[0]
     
     if request.method == 'POST':
         
@@ -213,7 +242,7 @@ def create():
                 # now we wait for the length of the booking, then make hotel available again
                 # using a separate thread for this so that the webpage will return result.html and not just wait for the booking to complete
                 threading.Thread(target=maintain_booking, args=(hotelname,int(length_booked)))
-                print("test to console",file=sys.stderr)
+                
 
 
             else: 
@@ -245,4 +274,4 @@ if __name__ == '__main__':
     #init_db()
     
     #create_data()
-    socketio.run(app)
+    socketio.run(app, port=8080)
