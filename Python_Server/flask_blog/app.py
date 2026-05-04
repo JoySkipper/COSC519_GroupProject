@@ -140,7 +140,7 @@ def background_thread():
         socketio.sleep(10)
         count += 1
         socketio.emit('my_response',
-                      {'data': 'Server generated event', 'count': waitingReader})
+                      {'data': 'Server generated event', 'count': count})
 
 
 # Create the profile table
@@ -165,7 +165,8 @@ def r():
 #reader function with writer priority
 def readers():
    global activeWriter, waitingWriter, activeReader, waitingReader
-   socketio.sleep(random.randint(3,10))
+   #socketio.sleep(random.randint(3,10))
+   time.sleep(random.randint(3,10))
    with lock:
        while (activeWriter + waitingWriter) > 0:
            waitingReader += 1
@@ -174,7 +175,7 @@ def readers():
            waitingReader -= 1
        activeReader += 1
    socketio.emit('my_response', {'data': 'Reading', 'count': activeReader})
-   socketio.sleep(random.randint(3,10))
+   time.sleep(random.randint(3,10))
    with lock:
        activeReader -= 1
        if activeReader == 0 and waitingWriter > 0:
@@ -183,7 +184,7 @@ def readers():
 #writer function for writer priority
 def writers():
     global activeWriter, waitingWriter, activeReader, waitingReader
-    socketio.sleep(random.randint(3,10))
+    time.sleep(random.randint(3,10))
     with lock:
         while (activeWriter + activeReader) > 0:
             waitingWriter += 1
@@ -192,7 +193,7 @@ def writers():
             waitingWriter -= 1
         activeWriter += 1
     socketio.emit('my_response', {'data': 'writer write', 'count': activeWriter})
-    socketio.sleep(random.randint(3,10))
+    time.sleep(random.randint(3,10))
     with lock:
         activeWriter -= 1
         if waitingWriter > 0:
@@ -203,6 +204,7 @@ def writers():
 
 @socketio.event
 def my_event(message):
+    socketio.start_background_task(readers)
     session['receive_count'] = session.get('receive_count', 0) + 1
     emit('my_response',
          {'data': message['data'], 'count': session['receive_count']})
@@ -218,11 +220,16 @@ def connect():
         if thread is None:
             thread = socketio.start_background_task(background_thread)
     '''
+    threads = []
     for _ in range(10):
-        socketio.start_background_task(readers)
+        #socketio.start_background_task(readers)
+        threads.append(threading.Thread(target=readers))
 
     for _ in range(5):
-        socketio.start_background_task(writers)
+        threads.append(threading.Thread(target=writers))
+
+    for i in threads:
+        i.start()
 
     emit('my_response', {'data': 'Connected', 'count': 0})
 
@@ -231,9 +238,10 @@ def connect():
 
 def maintain_booking(hotelname, length_booked):
     time.sleep(length_booked)
-    hotelname.length_booked = 0
-    db.session.commit()
-    #print("finished thread\n",file=sys.stderr)
+    with app.app_context():
+        hotelname.length_booked = 0
+        db.session.commit()
+        print("finished thread\n",file=sys.stderr)
   
 
 ##### end new section
@@ -293,7 +301,8 @@ def create():
 
                 # now we wait for the length of the booking, then make hotel available again
                 # using a separate thread for this so that the webpage will return result.html and not just wait for the booking to complete
-                threading.Thread(target=maintain_booking, args=(hotelname,int(length_booked)))
+                t = threading.Thread(target=maintain_booking, args=(hotelname,int(length_booked)))
+                t.start()
                 print("test to console",file=sys.stderr)
 
 
