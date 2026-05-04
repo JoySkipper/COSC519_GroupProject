@@ -68,14 +68,10 @@ writing = threading.Lock()
 mutex = threading.Lock()
 random.seed()
 
+#locks and conditionals for reader and writer functions
 lock = threading.Lock()
 conditionread = threading.Condition(lock)
 conditionwrite = threading.Condition(lock)
-aw = 0
-ww = 0
-ar = 0
-wr = 0
-fa = 0
 
 
 #Reader Writer Global Variables
@@ -150,6 +146,7 @@ def background_thread():
 # Create the profile table
 #meta.create_all(engine)
 
+#semaphore version of reader, not currently planned to be used
 def r():
     socketio.sleep(random.randint(3,10))
     global activeReader
@@ -165,7 +162,7 @@ def r():
         if activeReader == 0:
             writing.release()
 
-
+#reader function with writer priority
 def readers():
    global activeWriter, waitingWriter, activeReader, waitingReader
    socketio.sleep(random.randint(3,10))
@@ -183,6 +180,7 @@ def readers():
        if activeReader == 0 and waitingWriter > 0:
            conditionwrite.notify()
 
+#writer function for writer priority
 def writers():
     global activeWriter, waitingWriter, activeReader, waitingReader
     socketio.sleep(random.randint(3,10))
