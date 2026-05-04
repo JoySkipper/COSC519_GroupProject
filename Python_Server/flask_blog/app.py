@@ -24,7 +24,6 @@ logging.basicConfig(level=logging.DEBUG)
 
 # Create app
 app = Flask(__name__)
-#DB_URL = 'postgresql+psycopg2://{user}:{pw}@{url}/{db}'.format(user=POSTGRES_USER,pw=POSTGRES_PW,url=POSTGRES_URL,db=POSTGRES_DB)
 app.config['DEBUG'] = True
 
 # Generate a nice key using secrets.token_urlsafe()
@@ -38,11 +37,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "strict"
 
 # Use an in-memory db
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://'
-#app.config['SQLALCHEMY_DATABASE_URI'] = DB_URL
-# As of Flask-SQLAlchemy 2.4.0 it is easy to pass in options directly to the
-# underlying engine. This option makes sure that DB connections from the
-# pool are still valid. Important for entire application since
-# many DBaaS options automatically close idle connections.
+
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
@@ -66,7 +61,6 @@ fsqla.FsModels.set_db_info(db)
 
 #create engine
 engine = db.create_engine("sqlite://", echo=True)
-#engine = db.create_engine(DB_URL, echo=True)
 meta = db.MetaData()
 thread_lock = Lock()
 thread = None
@@ -88,7 +82,7 @@ waitingReader = 0
 waitingWriter = 0
 
 
-
+# Create database model to hold all hotel data
 class Hotel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True)
@@ -104,7 +98,7 @@ class Hotel(db.Model):
 
 
 
-
+# reads all hotel options and their current bookings from the database
 def hotelquery(): 
     hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
     striphotelchoices = []
@@ -190,12 +184,14 @@ def writers():
             conditionread.notify_all()
 
 
+# log event
 @socketio.event
 def my_event(message):
     session['receive_count'] = session.get('receive_count', 0) + 1
     emit('my_response',
          {'data': message['data'], 'count': session['receive_count']})
 
+# reader writer event
 @socketio.event
 def reader_writer_test():
     threads = []
@@ -203,7 +199,7 @@ def reader_writer_test():
         threads.append(threading.Thread(target=readers))
 
 
-
+# event for connecting to database
 @socketio.event
 def connect():
     '''
@@ -216,7 +212,7 @@ def connect():
     for _ in range(10):
         threads.append(threading.Thread(target=readers))
 
-
+# event for reading and printing database values 
 @socketio.event
 def reader_ping():
     hotelchoices, hotelbookings = hotelquery()
@@ -226,7 +222,8 @@ def reader_ping():
     emit('reader_data', JS_data)
 
 
-
+# counts down length booked and resets the booking value to 0 when this is done, 
+# so booking can be made by additional writers
 def maintain_booking(hotelname, length_booked):
     time.sleep(length_booked)
     with app.app_context():
@@ -235,8 +232,7 @@ def maintain_booking(hotelname, length_booked):
         print("finished thread\n",file=sys.stderr)
   
 
-##### end new section
-
+# security users and roles
 class Role(db.Model, fsqla.FsRoleMixin):
     pass
 
@@ -250,19 +246,26 @@ user_datastore = SQLAlchemyUserDatastore(db, User, Role)
 security = Security(app, user_datastore)
 
 # Views
+
+# index page
 @app.route("/")
 def index():
     #db_name = db.engine.url.database
     return render_template('index.html')
 
+# booking monitor page
 @app.route("/reader")
 def reader():
     return render_template('reader.html')
 
+# booking creation page (username password required)
+#username: test@me.com
+#password: password
 @app.route('/create', methods=('GET', 'POST'))
 @auth_required()
 def create():
     
+    #get only hotel options
     hotelchoices = hotelquery()[0]
     
     if request.method == 'POST':
@@ -283,10 +286,11 @@ def create():
                 # now we wait for the length of the booking, then make hotel available again
                 # using a separate thread for this so that the webpage will return result.html and not just wait for the booking to complete
                 t = threading.Thread(target=writers, args=(hotelname,int(length_booked)))
-                t2 = threading.Thread(target=maintain_booking(booking, length_booked))
+                #would like to make another thread (t2?) that runs maintain_booking
+                #t2 = threading.Thread(target=maintain_booking(booking, length_booked))
                 t.start()
-                t2.start()
-                #print("test to console",file=sys.stderr)
+                #t2.start()
+
 
 
             else: 
