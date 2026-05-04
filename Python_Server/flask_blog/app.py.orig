@@ -87,7 +87,18 @@ activeWriter = 0
 waitingReader = 0
 waitingWriter = 0
 
+#class Base(DeclarativeBase):
+#    pass
 
+'''
+# database name
+hotel = db.Table(
+    'hotel',                                        
+    meta,                                    
+    db.Column('name', db.String, primary_key=True),                  
+    db.Column('length_booked', db.Integer),                
+)
+'''
 
 class Hotel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -101,10 +112,34 @@ class Hotel(db.Model):
     def __repr__(self):
         return '<Hotel %r>' % self.name
 
+'''
+def init_db(): 
+    db.create_all()
+
+    db.session.add(Hotel('Marriott', 0))
+    db.session.add(Hotel('Hyatt',0))
+    db.session.commit()
+
+    hotels = Hotel.query.all()
+    print(hotels)
+'''
 
 
 
+#meta.create_all(engine)
 
+'''
+with engine.connect() as conn:
+    conn.execute(
+        insert(hotel),
+        [
+            {"name": "Marriott", "length_booked": 0},
+            {"name": "Hyatt", "length_booked": 0},
+        ]
+)
+'''
+
+<<<<<<< HEAD
 def hotelquery(): 
     hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
     striphotelchoices = []
@@ -120,7 +155,10 @@ def hotelquery():
 
     return(hotelchoices, hotelbookings)
     
-
+# Create the profile table
+#meta.create_all(engine)
+=======
+>>>>>>> multithreading
 
 def background_thread():
     """Example of how to send server generated events to clients."""
@@ -132,7 +170,8 @@ def background_thread():
                       {'data': 'Server generated event', 'count': count})
 
 
-
+# Create the profile table
+#meta.create_all(engine)
 
 #semaphore version of reader, not currently planned to be used
 def r():
@@ -202,6 +241,21 @@ def reader_writer_test():
     for _ in range(10):
         threads.append(threading.Thread(target=readers))
 
+    for _ in range(5):
+        threads.append(threading.Thread(target=writers))
+
+    for i in threads:
+        i.start()
+
+@socketio.event
+def reader_ping():
+    hotelchoices, hotelbookings = hotelquery()
+    #hotelDB = Hotel.query.all()
+    data = dict(zip(hotelchoices,hotelbookings))
+    data = json.dumps(data)
+    JS_data = json.loads(data)
+    emit('reader_data', JS_data)
+
 
 
 @socketio.event
@@ -216,23 +270,33 @@ def connect():
     for _ in range(10):
         threads.append(threading.Thread(target=readers))
 
+    for _ in range(5):
+        threads.append(threading.Thread(target=writers))
 
-@socketio.event
-def reader_ping():
-    hotelchoices, hotelbookings = hotelquery()
-    data = dict(zip(hotelchoices,hotelbookings))
-    data = json.dumps(data)
-    JS_data = json.loads(data)
-    emit('reader_data', JS_data)
+    for i in threads:
+        i.start()
+    emit('my_response', {'data': 'Connected', 'count': 0})
 
 
 
+
+<<<<<<< HEAD
+def maintain_booking(hname, booktime):
+    time.sleep(booktime)
+    hotelname = Hotel.query.filter_by(name=hname).first()
+    hotelname.length_booked = 0
+    db.session.commit()
+    print("test to console",file=sys.stderr)
+
+
+=======
 def maintain_booking(hotelname, length_booked):
     time.sleep(length_booked)
     with app.app_context():
         hotelname.length_booked = 0
         db.session.commit()
         print("finished thread\n",file=sys.stderr)
+>>>>>>> multithreading
   
 
 ##### end new section
@@ -268,13 +332,18 @@ def create():
     if request.method == 'POST':
         
         #### get to work with auth-required, also get to work as a query of database
+        #return redirect(url_for('index'))
+        #booking = request.form.get("hname")
+        #time = request.form.get("hnumber")
         result = request.form
+        #return redirect(url_for('index')
         if not result:
             flash('Hotel Name is required!')
         else:
             booking = result.get("hotelname")
             length_booked = result.get("hnumber")
             
+            #hotelname = Hotel.query.filter_by(name=booking).first()
             if booking in hotelchoices: 
                 hotelname = Hotel.query.filter_by(name=booking).first()
                 hotelname.length_booked = length_booked
@@ -282,11 +351,14 @@ def create():
 
                 # now we wait for the length of the booking, then make hotel available again
                 # using a separate thread for this so that the webpage will return result.html and not just wait for the booking to complete
+<<<<<<< HEAD
+                threading.Thread(target=maintain_booking, args=(hotelname,int(length_booked)))
+                
+=======
                 t = threading.Thread(target=writers, args=(hotelname,int(length_booked)))
-                t2 = threading.Thread(target=maintain_booking(booking, length_booked))
                 t.start()
-                t2.start()
-                #print("test to console",file=sys.stderr)
+                print("test to console",file=sys.stderr)
+>>>>>>> multithreading
 
 
             else: 
@@ -315,4 +387,7 @@ with app.app_context():
     print(hotels)
 
 if __name__ == '__main__':
+    #init_db()
+    
+    #create_data()
     socketio.run(app, port=8080)
