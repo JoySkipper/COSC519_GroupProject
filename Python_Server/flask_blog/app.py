@@ -204,7 +204,8 @@ def writers():
 
 @socketio.event
 def my_event(message):
-    socketio.start_background_task(readers)
+    t = threading.Thread(target=readers)
+    t.start()
     session['receive_count'] = session.get('receive_count', 0) + 1
     emit('my_response',
          {'data': message['data'], 'count': session['receive_count']})
