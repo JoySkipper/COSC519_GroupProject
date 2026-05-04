@@ -204,12 +204,21 @@ def writers():
 
 @socketio.event
 def my_event(message):
-    t = threading.Thread(target=readers)
-    t.start()
     session['receive_count'] = session.get('receive_count', 0) + 1
     emit('my_response',
          {'data': message['data'], 'count': session['receive_count']})
 
+@socketio.event
+def reader_writer_test():
+    threads = []
+    for _ in range(10):
+        threads.append(threading.Thread(target=readers))
+
+    for _ in range(5):
+        threads.append(threading.Thread(target=writers))
+
+    for i in threads:
+        i.start()
 
 
 
@@ -223,7 +232,6 @@ def connect():
     '''
     threads = []
     for _ in range(10):
-        #socketio.start_background_task(readers)
         threads.append(threading.Thread(target=readers))
 
     for _ in range(5):
@@ -231,7 +239,6 @@ def connect():
 
     for i in threads:
         i.start()
-
     emit('my_response', {'data': 'Connected', 'count': 0})
 
 
@@ -302,7 +309,7 @@ def create():
 
                 # now we wait for the length of the booking, then make hotel available again
                 # using a separate thread for this so that the webpage will return result.html and not just wait for the booking to complete
-                t = threading.Thread(target=maintain_booking, args=(hotelname,int(length_booked)))
+                t = threading.Thread(target=writers, args=(hotelname,int(length_booked)))
                 t.start()
                 print("test to console",file=sys.stderr)
 
