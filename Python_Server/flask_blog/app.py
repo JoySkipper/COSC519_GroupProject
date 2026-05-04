@@ -1,4 +1,5 @@
 import os
+import random
 
 from flask import Flask, render_template_string, request, flash, render_template, url_for, redirect, session, copy_current_request_context
 from flask_sqlalchemy import SQLAlchemy
@@ -45,9 +46,9 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # Set this variable to "threading", "eventlet" or "gevent" to test the
 # different async modes, or leave it set to None for the application to choose
 # the best option based on installed packages.
-async_mode = None
+async_mode = threading
 
-socketio = SocketIO(app, async_mode=async_mode, logger=True, engineio_logger=True)
+socketio = SocketIO(app, async_mode="threading", logger=True, engineio_logger=True)
 
 # Create database connection object
 db = SQLAlchemy(app)
@@ -62,6 +63,26 @@ engine = db.create_engine("sqlite://", echo=True)
 meta = db.MetaData()
 thread_lock = Lock()
 thread = None
+reading = threading.Lock()
+writing = threading.Lock()
+mutex = threading.Lock()
+random.seed()
+
+lock = threading.Lock()
+conditionread = threading.Condition(lock)
+conditionwrite = threading.Condition(lock)
+aw = 0
+ww = 0
+ar = 0
+wr = 0
+fa = 0
+
+
+#Reader Writer Global Variables
+activeReader = 0
+activeWriter = 0
+waitingReader = 0
+waitingWriter = 0
 
 #class Base(DeclarativeBase):
 #    pass
@@ -114,9 +135,7 @@ with engine.connect() as conn:
         ]
 )
 '''
-    
-# Create the profile table
-#meta.create_all(engine)
+
 
 def background_thread():
     """Example of how to send server generated events to clients."""
@@ -125,7 +144,63 @@ def background_thread():
         socketio.sleep(10)
         count += 1
         socketio.emit('my_response',
-                      {'data': 'Server generated event', 'count': count})
+                      {'data': 'Server generated event', 'count': waitingReader})
+
+
+# Create the profile table
+#meta.create_all(engine)
+
+def r():
+    socketio.sleep(random.randint(3,10))
+    global activeReader
+    with reading:
+        with mutex:
+            activeReader += 1
+            socketio.emit('my_response', {'data': 'Server generated event', 'count': activeReader})
+            if activeReader == 1:
+                writing.acquire()
+    socketio.sleep(random.randint(3, 10))
+    with mutex:
+        activeReader -= 1
+        if activeReader == 0:
+            writing.release()
+
+
+def readers():
+   global activeWriter, waitingWriter, activeReader, waitingReader
+   socketio.sleep(random.randint(3,10))
+   with lock:
+       while (activeWriter + waitingWriter) > 0:
+           waitingReader += 1
+          # socketio.emit('my_response', {'data': 'Read wait', 'count': waitingReader})
+           conditionread.wait()
+           waitingReader -= 1
+       activeReader += 1
+   socketio.emit('my_response', {'data': 'Reading', 'count': activeReader})
+   socketio.sleep(random.randint(3,10))
+   with lock:
+       activeReader -= 1
+       if activeReader == 0 and waitingWriter > 0:
+           conditionwrite.notify()
+
+def writers():
+    global activeWriter, waitingWriter, activeReader, waitingReader
+    socketio.sleep(random.randint(3,10))
+    with lock:
+        while (activeWriter + activeReader) > 0:
+            waitingWriter += 1
+            #socketio.emit('my_response', {'data': 'write wait', 'count': waitingWriter})
+            conditionwrite.wait()
+            waitingWriter -= 1
+        activeWriter += 1
+    socketio.emit('my_response', {'data': 'writer write', 'count': activeWriter})
+    socketio.sleep(random.randint(3,10))
+    with lock:
+        activeWriter -= 1
+        if waitingWriter > 0:
+            conditionwrite.notify()
+        else:
+            conditionread.notify_all()
 
 
 @socketio.event
@@ -139,10 +214,18 @@ def my_event(message):
 
 @socketio.event
 def connect():
+    '''
     global thread
     with thread_lock:
         if thread is None:
             thread = socketio.start_background_task(background_thread)
+    '''
+    for _ in range(10):
+        socketio.start_background_task(readers)
+
+    for _ in range(5):
+        socketio.start_background_task(writers)
+
     emit('my_response', {'data': 'Connected', 'count': 0})
 
 
