@@ -99,14 +99,19 @@ class Hotel(db.Model):
 
 
 # reads all hotel options and their current bookings from the database
+
 def hotelquery(): 
+    ### CRITICAL SECTION ->
     hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
+    ### CRITICAL SECTION <--
     striphotelchoices = []
     for value in hotelchoices: 
         striphotelchoices.append(value.strip("',()"))
     hotelchoices = striphotelchoices
 
+    ### CRITICAL SECTION ->
     hotelbookings = [str(i) for i in db.session.query(Hotel.length_booked)]
+    ### CRITICAL SECTION <--
     striphotelbookings = []
     for value in hotelbookings: 
         striphotelbookings.append(value.strip("',()"))
@@ -215,7 +220,9 @@ def connect():
 # event for reading and printing database values 
 @socketio.event
 def reader_ping():
+    ### CRITICAL SECTION (b/c calls hotelquery) -->
     hotelchoices, hotelbookings = hotelquery()
+    ### CRITICAL SECTION <--
     data = dict(zip(hotelchoices,hotelbookings))
     data = json.dumps(data)
     JS_data = json.loads(data)
@@ -224,11 +231,14 @@ def reader_ping():
 
 # counts down length booked and resets the booking value to 0 when this is done, 
 # so booking can be made by additional writers
+# NOTE: still need to get this to work
 def maintain_booking(hotelname, length_booked):
     time.sleep(length_booked)
     with app.app_context():
         hotelname.length_booked = 0
+        ### CRITICAL SECTION -->
         db.session.commit()
+        ### CRITICAL SECTION <--
         print("finished thread\n",file=sys.stderr)
   
 
@@ -250,7 +260,6 @@ security = Security(app, user_datastore)
 # index page
 @app.route("/")
 def index():
-    #db_name = db.engine.url.database
     return render_template('index.html')
 
 # booking monitor page
@@ -266,7 +275,9 @@ def reader():
 def create():
     
     #get only hotel options
+    ### CRITICAL SECTION (b/c calls hotelquery) -->
     hotelchoices = hotelquery()[0]
+    ### CRITICAL SECTION <--
     
     if request.method == 'POST':
         
@@ -279,9 +290,11 @@ def create():
             length_booked = result.get("hnumber")
             
             if booking in hotelchoices: 
+                ### CRITICAL SECTION -->
                 hotelname = Hotel.query.filter_by(name=booking).first()
                 hotelname.length_booked = length_booked
                 db.session.commit()
+                ### CRITICAL SECTION <--
 
                 # now we wait for the length of the booking, then make hotel available again
                 # using a separate thread for this so that the webpage will return result.html and not just wait for the booking to complete
@@ -305,6 +318,7 @@ def create():
 
 # one time setup
 with app.app_context():
+    ### CRITICAL SECTION -->
     # Create User to test with
     db.create_all()
     if not security.datastore.find_user(email="test@me.com"):
@@ -316,6 +330,7 @@ with app.app_context():
     db.session.commit()
 
     hotels = Hotel.query.all()
+    ### CRITICAL SECTION <--
     print(hotels)
 
 if __name__ == '__main__':
