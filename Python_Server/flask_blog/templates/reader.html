@@ -106,6 +106,10 @@
                 socket.emit('disconnect_request');
                 return false;
             });
+            $('form#readWrite').submit(function(event) {
+                socket.emit('reader_writer_test')
+                return false;
+            });
         });
     </script>
 </head>
@@ -141,6 +145,9 @@
     <form id="close" method="POST" action="#">
         <input type="text" name="close_room" id="close_room" placeholder="Room Name">
         <input type="submit" value="Close Room">
+    </form>
+    <form id="readWrite" method="POST" action="#">
+        <input type="submit" value="Test Readers and Writers">
     </form>
     <form id="disconnect" method="POST" action="#">
         <input type="submit" value="Disconnect">
