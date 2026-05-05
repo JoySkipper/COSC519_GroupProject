@@ -120,7 +120,13 @@ def hotelquery():
         hotelbookings = striphotelbookings
 
         return(hotelchoices, hotelbookings)
-    
+
+
+def hotelCommit(booking, length_booked):
+    with app.app_context():
+        hotelname = Hotel.query.filter_by(name=booking).first()
+        hotelname.length_booked = length_booked
+        db.session.commit()
 
 
 def background_thread():
@@ -155,7 +161,7 @@ def r():
 def readers():
    global activeWriter, waitingWriter, activeReader, waitingReader
    #socketio.sleep(random.randint(3,10))
-   time.sleep(random.randint(3,10))
+   time.sleep(1)
    with lock:
        while (activeWriter + waitingWriter) > 0:
            waitingReader += 1
@@ -165,7 +171,7 @@ def readers():
        activeReader += 1
    #socketio.emit('my_response', {'data': 'Reading', 'count': activeReader})
    hotelchoices, hotelbookings = hotelquery()
-   time.sleep(random.randint(3,10))
+   time.sleep(random.randint(2,3))
    with lock:
        activeReader -= 1
        if activeReader == 0 and waitingWriter > 0:
@@ -175,9 +181,9 @@ def readers():
 
 
 #writer function for writer priority
-def writers():
+def writers(booking, length_booked):
     global activeWriter, waitingWriter, activeReader, waitingReader
-    time.sleep(random.randint(3,10))
+    time.sleep(random.randint(1))
     with lock:
         while (activeWriter + activeReader) > 0:
             waitingWriter += 1
@@ -185,15 +191,15 @@ def writers():
             conditionwrite.wait()
             waitingWriter -= 1
         activeWriter += 1
-    socketio.emit('my_response', {'data': 'writer write', 'count': activeWriter})
-    time.sleep(random.randint(3,10))
+    #socketio.emit('my_response', {'data': 'writer write', 'count': activeWriter})
+    hotelCommit(booking, length_booked)
+    time.sleep(random.randint(2, 4))
     with lock:
         activeWriter -= 1
         if waitingWriter > 0:
             conditionwrite.notify()
         else:
             conditionread.notify_all()
-
 
 # log event
 @socketio.event
@@ -204,6 +210,7 @@ def my_event(message):
 
 @socketio.event
 def reader_writer_test():
+    ''' old test code not compatible with changes, don't use
     threads = []
     for _ in range(10):
         threads.append(threading.Thread(target=readers))
@@ -213,7 +220,7 @@ def reader_writer_test():
 
     for i in threads:
         i.start()
-
+    '''
 
 # event for connecting to database
 @socketio.event
@@ -224,18 +231,15 @@ def connect():
         if thread is None:
             thread = socketio.start_background_task(background_thread)
     '''
-    '''
-    threads = []
-    for _ in range(10):
-        threads.append(threading.Thread(target=readers))
 
+    threads = []
     for _ in range(5):
         threads.append(threading.Thread(target=writers))
 
     for i in threads:
         i.start()
     emit('my_response', {'data': 'Connected', 'count': 0})
-    '''
+
 
 # event for reading and printing database values
 #source for threadpoolexecutor https://docs.python.org/3/library/concurrent.futures.html
@@ -257,12 +261,13 @@ def reader_ping():
 # so booking can be made by additional writers
 # NOTE: still need to get this to work
 
-def maintain_booking(hotelname, length_booked):
-    time.sleep(length_booked)
+def maintain_booking(booking, length_booked):
+    time.sleep(int(length_booked))
     with app.app_context():
-        hotelname.length_booked = 0
         ### CRITICAL SECTION -->
-        db.session.commit()
+        with ThreadPoolExecutor() as executor:
+            length_booked = 0
+            future = executor.submit(writers(booking, length_booked))
         ### CRITICAL SECTION <--
         print("finished thread\n",file=sys.stderr)
   
@@ -301,7 +306,9 @@ def create():
     
     #get only hotel options
     ### CRITICAL SECTION (b/c calls hotelquery) -->
-    hotelchoices = hotelquery()[0]
+    with ThreadPoolExecutor() as executor:
+        future = executor.submit(readers)
+        hotelchoices = future.result()[0]
     ### CRITICAL SECTION <--
     
     if request.method == 'POST':
@@ -316,20 +323,17 @@ def create():
 
             if booking in hotelchoices: 
                 ### CRITICAL SECTION -->
-                hotelname = Hotel.query.filter_by(name=booking).first()
-                hotelname.length_booked = length_booked
-                db.session.commit()
+                with ThreadPoolExecutor() as executor:
+                    future = executor.submit(writers, booking, length_booked)
                 ### CRITICAL SECTION <--
 
                 # now we wait for the length of the booking, then make hotel available again
                 # using a separate thread for this so that the webpage will return result.html and not just wait for the booking to complete
-                t = threading.Thread(target=writers)
+                t = threading.Thread(target=maintain_booking, args=(booking, length_booked))
                 #would like to make another thread (t2?) that runs maintain_booking
                 #t2 = threading.Thread(target=maintain_booking(booking, length_booked))
                 t.start()
                 #t2.start()
-
-
 
             else: 
                 flash('Hotel not in system')
