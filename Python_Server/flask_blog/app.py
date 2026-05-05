@@ -262,12 +262,13 @@ def reader_ping():
 # so booking can be made by additional writers
 # NOTE: still need to get this to work
 
-def maintain_booking(hotelname, length_booked):
+def maintain_booking(booking, length_booked):
     time.sleep(int(length_booked))
     with app.app_context():
-        hotelname.length_booked = 0
         ### CRITICAL SECTION -->
-        db.session.commit()
+        with ThreadPoolExecutor() as executor:
+            length_booked = 0
+            future = executor.submit(writers(booking, length_booked))
         ### CRITICAL SECTION <--
         print("finished thread\n",file=sys.stderr)
   
@@ -325,18 +326,15 @@ def create():
                 ### CRITICAL SECTION -->
                 with ThreadPoolExecutor() as executor:
                     future = executor.submit(writers, booking, length_booked)
-                    hotelname = future.result()
                 ### CRITICAL SECTION <--
 
                 # now we wait for the length of the booking, then make hotel available again
                 # using a separate thread for this so that the webpage will return result.html and not just wait for the booking to complete
-                t = threading.Thread(target=maintain_booking, args=(hotelname, length_booked))
+                t = threading.Thread(target=maintain_booking, args=(booking, length_booked))
                 #would like to make another thread (t2?) that runs maintain_booking
                 #t2 = threading.Thread(target=maintain_booking(booking, length_booked))
                 t.start()
                 #t2.start()
-
-
 
             else: 
                 flash('Hotel not in system')
