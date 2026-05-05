@@ -123,6 +123,9 @@ def hotelquery(hotel=""):
         else:
             hotelchoices = Hotel.query.filter_by(name=hotel).first()
             hotelbookings = hotelchoices.length_booked
+            #output for reader_writer_test for readers in hotel monitoring page
+            socketio.emit('reader_data', hotelchoices.name + ", " + str(hotelbookings))
+
 
         return(hotelchoices, hotelbookings)
 
@@ -165,16 +168,13 @@ def r():
 #reader function with writer priority
 def readers(hotel=""):
    global activeWriter, waitingWriter, activeReader, waitingReader
-   #socketio.sleep(random.randint(3,10))
-   time.sleep(1)
+   time.sleep(random.randint(1, 4))
    with lock:
        while (activeWriter + waitingWriter) > 0:
            waitingReader += 1
-          # socketio.emit('my_response', {'data': 'Read wait', 'count': waitingReader})
            conditionread.wait()
            waitingReader -= 1
        activeReader += 1
-   #socketio.emit('my_response', {'data': 'Reading', 'count': activeReader})
    hotelchoices, hotelbookings = hotelquery(hotel)
    time.sleep(random.randint(2,3))
    with lock:
@@ -188,20 +188,22 @@ def readers(hotel=""):
 #writer function for writer priority
 def writers(booking, length_booked):
     global activeWriter, waitingWriter, activeReader, waitingReader
-    time.sleep(random.randint(1))
+    time.sleep(random.randint(1, 4))
     with lock:
         while (activeWriter + activeReader) > 0:
             waitingWriter += 1
-            #socketio.emit('my_response', {'data': 'write wait', 'count': waitingWriter})
+            socketio.emit('reader_data', "waiting writer action")
             conditionwrite.wait()
             waitingWriter -= 1
         activeWriter += 1
-    #socketio.emit('my_response', {'data': 'writer write', 'count': activeWriter})
     hotelCommit(booking, length_booked)
+    writerMessage = "Writer Action: " + booking + ", " + str(length_booked)
+    socketio.emit('reader_data', writerMessage)
     time.sleep(random.randint(2, 4))
     with lock:
         activeWriter -= 1
         if waitingWriter > 0:
+
             conditionwrite.notify()
         else:
             conditionread.notify_all()
@@ -213,6 +215,7 @@ def my_event(message):
     emit('my_response',
          {'data': message['data'], 'count': session['receive_count']})
 
+# generates 10 random readers and 5 random writers
 @socketio.event
 def reader_writer_test():
     with ThreadPoolExecutor() as executor:
@@ -220,25 +223,17 @@ def reader_writer_test():
         hotelchoices, hotelbookings = future.result()
 
     with ThreadPoolExecutor() as executor:
+        futures = []
+
+        for _ in range(10):
+            randomHotel2 = random.choice(hotelchoices)
+            future = executor.submit(readers, randomHotel2)
+
+
         for _ in range(5):
             randomHotel = random.choice(hotelchoices)
-            future = executor.submit(readers, randomHotel)
-            hotelchoices2, hotelbookings2 = future.result()
-            hotelInfo = hotelchoices2.name + ", " + str(hotelbookings2)
-            socketio.emit('reader_data', hotelInfo)
-
-
-    ''' old test code not compatible with changes, don't use
-    threads = []
-    for _ in range(10):
-        threads.append(threading.Thread(target=readers))
-
-    for _ in range(5):
-        threads.append(threading.Thread(target=writers))
-
-    for i in threads:
-        i.start()
-    '''
+            randomNum = random.randint(1, 10)
+            future = executor.submit(writers, randomHotel, randomNum)
 
 # event for connecting to database
 @socketio.event
@@ -256,6 +251,7 @@ def connect():
 #source for threadpoolexecutor https://docs.python.org/3/library/concurrent.futures.html
 @socketio.event
 def reader_ping():
+
     ### CRITICAL SECTION (b/c calls hotelquery) -->
     #thread pool executor uses limited number of threads to get hotelquery. submit calls the reader function and future stores the query result from ready
     with ThreadPoolExecutor() as executor:
@@ -278,7 +274,7 @@ def maintain_booking(booking, length_booked):
         ### CRITICAL SECTION -->
         with ThreadPoolExecutor() as executor:
             length_booked = 0
-            future = executor.submit(writers(booking, length_booked))
+            future = executor.submit(writers, booking, length_booked)
         ### CRITICAL SECTION <--
         print("finished thread\n",file=sys.stderr)
   
