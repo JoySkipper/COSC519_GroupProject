@@ -222,16 +222,19 @@ def reader_writer_test():
         future = executor.submit(readers)
         hotelchoices, hotelbookings = future.result()
 
+    hotelNum = len(hotelchoices)
+
     with ThreadPoolExecutor() as executor:
         for _ in range(10):
             randomHotel2 = random.choice(hotelchoices)
-            future = executor.submit(readers, randomHotel2)
+            executor.submit(readers, randomHotel2)
 
 
-        for _ in range(5):
-            randomHotel = random.choice(hotelchoices)
-            randomNum = random.randint(1, 10)
-            future = executor.submit(writers, randomHotel, randomNum)
+        for i in range(hotelNum):
+            randomNum = random.randint(10, 30)
+            print(hotelchoices[i])
+            executor.submit(writers, hotelchoices[i], randomNum)
+            executor.submit(maintain_booking, hotelchoices[i], randomNum)
 
 # event for connecting to database
 @socketio.event
@@ -272,7 +275,7 @@ def maintain_booking(booking, length_booked):
         ### CRITICAL SECTION -->
         with ThreadPoolExecutor() as executor:
             length_booked = 0
-            future = executor.submit(writers, booking, length_booked)
+            executor.submit(writers, booking, length_booked)
         ### CRITICAL SECTION <--
         print("finished thread\n",file=sys.stderr)
   
