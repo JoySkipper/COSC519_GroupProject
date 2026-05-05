@@ -121,13 +121,12 @@ def hotelquery():
 
         return(hotelchoices, hotelbookings)
 
+
 def hotelCommit(booking, length_booked):
     with app.app_context():
         hotelname = Hotel.query.filter_by(name=booking).first()
         hotelname.length_booked = length_booked
         db.session.commit()
-
-        return hotelname
 
 
 def background_thread():
@@ -193,7 +192,7 @@ def writers(booking, length_booked):
             waitingWriter -= 1
         activeWriter += 1
     #socketio.emit('my_response', {'data': 'writer write', 'count': activeWriter})
-    hotelname = hotelCommit(booking, length_booked)
+    hotelCommit(booking, length_booked)
     time.sleep(random.randint(3,5))
     with lock:
         activeWriter -= 1
@@ -201,7 +200,6 @@ def writers(booking, length_booked):
             conditionwrite.notify()
         else:
             conditionread.notify_all()
-    return hotelname
 
 # log event
 @socketio.event
