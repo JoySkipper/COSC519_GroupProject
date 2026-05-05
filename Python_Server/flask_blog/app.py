@@ -223,8 +223,6 @@ def reader_writer_test():
         hotelchoices, hotelbookings = future.result()
 
     with ThreadPoolExecutor() as executor:
-        futures = []
-
         for _ in range(10):
             randomHotel2 = random.choice(hotelchoices)
             future = executor.submit(readers, randomHotel2)
