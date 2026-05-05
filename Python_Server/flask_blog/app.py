@@ -210,6 +210,7 @@ def my_event(message):
 
 @socketio.event
 def reader_writer_test():
+    ''' old test code not compatible with changes, don't use
     threads = []
     for _ in range(10):
         threads.append(threading.Thread(target=readers))
@@ -219,7 +220,7 @@ def reader_writer_test():
 
     for i in threads:
         i.start()
-
+    '''
 
 # event for connecting to database
 @socketio.event
