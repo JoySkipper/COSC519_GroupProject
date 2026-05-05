@@ -24,13 +24,11 @@ pip install flask_sqlalchemy
 pip install flask_security
 pip install flask_socketio
 pip install argon2_cffi
-
 ```
 finally, navigate to the flask_blog/ directory and run the following command: 
 
 ```
 flask run --port 8080
-
 ```
 
 ## Summary of Participant Roles
@@ -44,7 +42,7 @@ flask run --port 8080
 
 ## Ian's Role: 
 
-<p>Put info on role here - set up readers/writers</p>
+<p>Ian please info on role here - set up readers/writers</p>
 
 ## References
 
