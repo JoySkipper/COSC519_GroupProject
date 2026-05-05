@@ -12,6 +12,7 @@ from typing import Optional
 import time
 import threading
 from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 import sys
 import logging
@@ -100,24 +101,25 @@ class Hotel(db.Model):
 
 # reads all hotel options and their current bookings from the database
 
-def hotelquery(): 
-    ### CRITICAL SECTION ->
-    hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
-    ### CRITICAL SECTION <--
-    striphotelchoices = []
-    for value in hotelchoices: 
-        striphotelchoices.append(value.strip("',()"))
-    hotelchoices = striphotelchoices
+def hotelquery():
+    with app.app_context():
+        ### CRITICAL SECTION ->
+        hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
+        ### CRITICAL SECTION <--
+        striphotelchoices = []
+        for value in hotelchoices:
+            striphotelchoices.append(value.strip("',()"))
+        hotelchoices = striphotelchoices
 
-    ### CRITICAL SECTION ->
-    hotelbookings = [str(i) for i in db.session.query(Hotel.length_booked)]
-    ### CRITICAL SECTION <--
-    striphotelbookings = []
-    for value in hotelbookings: 
-        striphotelbookings.append(value.strip("',()"))
-    hotelbookings = striphotelbookings
+        ### CRITICAL SECTION ->
+        hotelbookings = [str(i) for i in db.session.query(Hotel.length_booked)]
+        ### CRITICAL SECTION <--
+        striphotelbookings = []
+        for value in hotelbookings:
+            striphotelbookings.append(value.strip("',()"))
+        hotelbookings = striphotelbookings
 
-    return(hotelchoices, hotelbookings)
+        return(hotelchoices, hotelbookings)
     
 
 
@@ -161,12 +163,16 @@ def readers():
            conditionread.wait()
            waitingReader -= 1
        activeReader += 1
-   socketio.emit('my_response', {'data': 'Reading', 'count': activeReader})
+   #socketio.emit('my_response', {'data': 'Reading', 'count': activeReader})
+   hotelchoices, hotelbookings = hotelquery()
    time.sleep(random.randint(3,10))
    with lock:
        activeReader -= 1
        if activeReader == 0 and waitingWriter > 0:
            conditionwrite.notify()
+
+   return (hotelchoices, hotelbookings)
+
 
 #writer function for writer priority
 def writers():
@@ -218,6 +224,7 @@ def connect():
         if thread is None:
             thread = socketio.start_background_task(background_thread)
     '''
+    '''
     threads = []
     for _ in range(10):
         threads.append(threading.Thread(target=readers))
@@ -228,12 +235,17 @@ def connect():
     for i in threads:
         i.start()
     emit('my_response', {'data': 'Connected', 'count': 0})
+    '''
 
-# event for reading and printing database values 
+# event for reading and printing database values
+#source for threadpoolexecutor https://docs.python.org/3/library/concurrent.futures.html
 @socketio.event
 def reader_ping():
     ### CRITICAL SECTION (b/c calls hotelquery) -->
-    hotelchoices, hotelbookings = hotelquery()
+    #thread pool executor uses limited number of threads to get hotelquery. submit calls the reader function and future stores the query result from ready
+    with ThreadPoolExecutor() as executor:
+         future = executor.submit(readers)
+         hotelchoices, hotelbookings = future.result()
     ### CRITICAL SECTION <--
     data = dict(zip(hotelchoices,hotelbookings))
     data = json.dumps(data)
@@ -301,7 +313,7 @@ def create():
         else:
             booking = result.get("hotelname")
             length_booked = result.get("hnumber")
-            
+
             if booking in hotelchoices: 
                 ### CRITICAL SECTION -->
                 hotelname = Hotel.query.filter_by(name=booking).first()
