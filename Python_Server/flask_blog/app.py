@@ -162,7 +162,7 @@ def r():
 def readers():
    global activeWriter, waitingWriter, activeReader, waitingReader
    #socketio.sleep(random.randint(3,10))
-   time.sleep(random.randint(2,4))
+   time.sleep(1)
    with lock:
        while (activeWriter + waitingWriter) > 0:
            waitingReader += 1
@@ -172,7 +172,7 @@ def readers():
        activeReader += 1
    #socketio.emit('my_response', {'data': 'Reading', 'count': activeReader})
    hotelchoices, hotelbookings = hotelquery()
-   time.sleep(random.randint(2,4))
+   time.sleep(random.randint(2,3))
    with lock:
        activeReader -= 1
        if activeReader == 0 and waitingWriter > 0:
@@ -184,7 +184,7 @@ def readers():
 #writer function for writer priority
 def writers(booking, length_booked):
     global activeWriter, waitingWriter, activeReader, waitingReader
-    time.sleep(random.randint(3,5))
+    time.sleep(random.randint(2, 3))
     with lock:
         while (activeWriter + activeReader) > 0:
             waitingWriter += 1
