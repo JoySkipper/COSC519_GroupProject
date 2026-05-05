@@ -1,5 +1,6 @@
 import os
 import random
+import webbrowser
 
 from flask import Flask, render_template_string, request, flash, render_template, url_for, redirect, session, copy_current_request_context
 from flask_sqlalchemy import SQLAlchemy
@@ -11,7 +12,7 @@ from typing import List
 from typing import Optional
 import time
 import threading
-from threading import Lock
+from threading import Lock, Timer
 from concurrent.futures import ThreadPoolExecutor
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 import sys
@@ -101,23 +102,27 @@ class Hotel(db.Model):
 
 # reads all hotel options and their current bookings from the database
 
-def hotelquery():
+def hotelquery(hotel=""):
     with app.app_context():
-        ### CRITICAL SECTION ->
-        hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
-        ### CRITICAL SECTION <--
-        striphotelchoices = []
-        for value in hotelchoices:
-            striphotelchoices.append(value.strip("',()"))
-        hotelchoices = striphotelchoices
+        if hotel == "":
+            ### CRITICAL SECTION ->
+            hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
+            ### CRITICAL SECTION <--
+            striphotelchoices = []
+            for value in hotelchoices:
+                striphotelchoices.append(value.strip("',()"))
+            hotelchoices = striphotelchoices
 
-        ### CRITICAL SECTION ->
-        hotelbookings = [str(i) for i in db.session.query(Hotel.length_booked)]
-        ### CRITICAL SECTION <--
-        striphotelbookings = []
-        for value in hotelbookings:
-            striphotelbookings.append(value.strip("',()"))
-        hotelbookings = striphotelbookings
+            ### CRITICAL SECTION ->
+            hotelbookings = [str(i) for i in db.session.query(Hotel.length_booked)]
+            ### CRITICAL SECTION <--
+            striphotelbookings = []
+            for value in hotelbookings:
+                striphotelbookings.append(value.strip("',()"))
+            hotelbookings = striphotelbookings
+        else:
+            hotelchoices = Hotel.query.filter_by(name=hotel).first()
+            hotelbookings = hotelchoices.length_booked
 
         return(hotelchoices, hotelbookings)
 
@@ -158,7 +163,7 @@ def r():
             writing.release()
 
 #reader function with writer priority
-def readers():
+def readers(hotel=""):
    global activeWriter, waitingWriter, activeReader, waitingReader
    #socketio.sleep(random.randint(3,10))
    time.sleep(1)
@@ -170,7 +175,7 @@ def readers():
            waitingReader -= 1
        activeReader += 1
    #socketio.emit('my_response', {'data': 'Reading', 'count': activeReader})
-   hotelchoices, hotelbookings = hotelquery()
+   hotelchoices, hotelbookings = hotelquery(hotel)
    time.sleep(random.randint(2,3))
    with lock:
        activeReader -= 1
@@ -210,6 +215,19 @@ def my_event(message):
 
 @socketio.event
 def reader_writer_test():
+    with ThreadPoolExecutor() as executor:
+        future = executor.submit(readers)
+        hotelchoices, hotelbookings = future.result()
+
+    with ThreadPoolExecutor() as executor:
+        for _ in range(5):
+            randomHotel = random.choice(hotelchoices)
+            future = executor.submit(readers, randomHotel)
+            hotelchoices2, hotelbookings2 = future.result()
+            hotelInfo = hotelchoices2.name + ", " + str(hotelbookings2)
+            socketio.emit('reader_data', hotelInfo)
+
+
     ''' old test code not compatible with changes, don't use
     threads = []
     for _ in range(10):
@@ -231,13 +249,6 @@ def connect():
         if thread is None:
             thread = socketio.start_background_task(background_thread)
     '''
-
-    threads = []
-    for _ in range(5):
-        threads.append(threading.Thread(target=writers))
-
-    for i in threads:
-        i.start()
     emit('my_response', {'data': 'Connected', 'count': 0})
 
 
@@ -361,6 +372,7 @@ with app.app_context():
     hotels = Hotel.query.all()
     ### CRITICAL SECTION <--
     print(hotels)
+
 
 if __name__ == '__main__':
     socketio.run(app, port=8080)
