@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h1>{% block title %} Create a New Hotel Booking {% endblock %}</h1>
+<br>
+<h1>{% block title %} Book a Hotel Room {% endblock %}</h1>
 
 
 
@@ -10,7 +11,7 @@
 
  <form action = "{{ url_for("create")}}" method="POST">
 
-    <label for="hotelchoices">Choose a Hotel:</label>
+    <label for="hotelchoices">Choose a Room:</label>
 
     <select name="hotelname" id="hotelchoices">
         {% for value in hotelchoices %} 

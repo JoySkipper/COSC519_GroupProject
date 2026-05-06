@@ -234,21 +234,18 @@ def reader_writer_test():
 
 
         for i in range(hotelNum):
-            randomNum = random.randint(10, 30)
+            randomNum = random.randint(20, 40)
             executor.submit(writers, hotelchoices[i], randomNum)
             executor.submit(maintain_booking, hotelchoices[i], randomNum)
 
 
 @socketio.event
 def connect():
-    '''
-    global thread
-    with thread_lock:
-        if thread is None:
-            thread = socketio.start_background_task(background_thread)
-    '''
     emit('my_response', {'data': 'Connected', 'count': 0})
 
+@socketio.event
+def disconnect_request():
+    disconnect()
 
 # event for reading and printing database values
 #source for threadpoolexecutor https://docs.python.org/3/library/concurrent.futures.html
@@ -305,8 +302,8 @@ def reader():
     return render_template('reader.html')
 
 # booking creation page (username password required)
-#username: test@me.com
-#password: password
+#username: manager@hotel.com
+#password: ilovehotels
 @app.route('/create', methods=('GET', 'POST'))
 @auth_required()
 def create():
@@ -357,12 +354,15 @@ with app.app_context():
     ### CRITICAL SECTION -->
     # Create User to test with
     db.create_all()
-    if not security.datastore.find_user(email="test@me.com"):
-        security.datastore.create_user(email="test@me.com", password=hash_password("password"))
+    if not security.datastore.find_user(email="manager@hotel.com"):
+        security.datastore.create_user(email="manager@hotel.com", password=hash_password("ilovehotels"))
     db.session.commit()
 
-    db.session.add(Hotel('Marriott', 0))
-    db.session.add(Hotel('Hyatt',0))
+    db.session.add(Hotel('Penthouse Suite', 0))
+    db.session.add(Hotel('King Suite',0))
+    db.session.add(Hotel('Double Queen Suite',0))
+    db.session.add(Hotel('King Guest Room',0))
+    db.session.add(Hotel('Double Queen Guest Room',0))
     db.session.commit()
 
     hotels = Hotel.query.all()
