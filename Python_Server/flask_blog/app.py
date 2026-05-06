@@ -174,12 +174,14 @@ def readers(hotel=""):
            conditionread.wait()
            waitingReader -= 1
        activeReader += 1
-   hotelchoices, hotelbookings = hotelquery(hotel)
-   time.sleep(random.randint(2,3))
-   with lock:
-       activeReader -= 1
-       if activeReader == 0 and waitingWriter > 0:
-           conditionwrite.notify()
+   try:
+       hotelchoices, hotelbookings = hotelquery(hotel)
+       time.sleep(random.randint(2,3))
+   finally:
+       with lock:
+           activeReader -= 1
+           if activeReader == 0 and waitingWriter > 0:
+               conditionwrite.notify()
 
    return (hotelchoices, hotelbookings)
 
@@ -195,17 +197,19 @@ def writers(booking, length_booked):
             conditionwrite.wait()
             waitingWriter -= 1
         activeWriter += 1
-    hotelCommit(booking, length_booked)
-    writerMessage = "Writer Action: " + booking + ", " + str(length_booked)
-    socketio.emit('reader_data', writerMessage)
-    time.sleep(random.randint(2, 4))
-    with lock:
-        activeWriter -= 1
-        if waitingWriter > 0:
+    try:
+        hotelCommit(booking, length_booked)
+        writerMessage = "Writer Action: " + booking + ", " + str(length_booked)
+        socketio.emit('reader_data', writerMessage)
+        time.sleep(random.randint(2, 4))
+    finally:
+        with lock:
+            activeWriter -= 1
+            if waitingWriter > 0:
 
-            conditionwrite.notify()
-        else:
-            conditionread.notify_all()
+                conditionwrite.notify()
+            else:
+                conditionread.notify_all()
 
 # log event
 @socketio.event
@@ -222,7 +226,6 @@ def reader_writer_test():
         hotelchoices, hotelbookings = future.result()
 
     hotelNum = len(hotelchoices)
-    randomNums = []
 
     with ThreadPoolExecutor() as executor:
         for _ in range(10):
@@ -232,9 +235,8 @@ def reader_writer_test():
 
         for i in range(hotelNum):
             randomNum = random.randint(10, 30)
-            randomNums.append(randomNum)
             executor.submit(writers, hotelchoices[i], randomNum)
-            executor.submit(maintain_booking, hotelchoices[i], randomNums[i])
+            executor.submit(maintain_booking, hotelchoices[i], randomNum)
 
 
 @socketio.event
