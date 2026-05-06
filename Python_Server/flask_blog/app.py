@@ -101,23 +101,30 @@ class Hotel(db.Model):
 
 # reads all hotel options and their current bookings from the database
 
-def hotelquery():
+def hotelquery(hotel=""):
     with app.app_context():
-        ### CRITICAL SECTION ->
-        hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
-        ### CRITICAL SECTION <--
-        striphotelchoices = []
-        for value in hotelchoices:
-            striphotelchoices.append(value.strip("',()"))
-        hotelchoices = striphotelchoices
+        if hotel == "":
+            ### CRITICAL SECTION ->
+            hotelchoices = [str(i) for i in db.session.query(Hotel.name)]
+            ### CRITICAL SECTION <--
+            striphotelchoices = []
+            for value in hotelchoices:
+                striphotelchoices.append(value.strip("',()"))
+            hotelchoices = striphotelchoices
 
-        ### CRITICAL SECTION ->
-        hotelbookings = [str(i) for i in db.session.query(Hotel.length_booked)]
-        ### CRITICAL SECTION <--
-        striphotelbookings = []
-        for value in hotelbookings:
-            striphotelbookings.append(value.strip("',()"))
-        hotelbookings = striphotelbookings
+            ### CRITICAL SECTION ->
+            hotelbookings = [str(i) for i in db.session.query(Hotel.length_booked)]
+            ### CRITICAL SECTION <--
+            striphotelbookings = []
+            for value in hotelbookings:
+                striphotelbookings.append(value.strip("',()"))
+            hotelbookings = striphotelbookings
+        else:
+            hotelchoices = Hotel.query.filter_by(name=hotel).first()
+            hotelbookings = hotelchoices.length_booked
+            #output for reader_writer_test for readers in hotel monitoring page
+            socketio.emit('reader_data', hotelchoices.name + ", " + str(hotelbookings))
+
 
         return(hotelchoices, hotelbookings)
 
@@ -158,19 +165,16 @@ def r():
             writing.release()
 
 #reader function with writer priority
-def readers():
+def readers(hotel=""):
    global activeWriter, waitingWriter, activeReader, waitingReader
-   #socketio.sleep(random.randint(3,10))
-   time.sleep(1)
+   time.sleep(random.randint(1, 4))
    with lock:
        while (activeWriter + waitingWriter) > 0:
            waitingReader += 1
-          # socketio.emit('my_response', {'data': 'Read wait', 'count': waitingReader})
            conditionread.wait()
            waitingReader -= 1
        activeReader += 1
-   #socketio.emit('my_response', {'data': 'Reading', 'count': activeReader})
-   hotelchoices, hotelbookings = hotelquery()
+   hotelchoices, hotelbookings = hotelquery(hotel)
    time.sleep(random.randint(2,3))
    with lock:
        activeReader -= 1
@@ -183,20 +187,22 @@ def readers():
 #writer function for writer priority
 def writers(booking, length_booked):
     global activeWriter, waitingWriter, activeReader, waitingReader
-    time.sleep(random.randint(1))
+    time.sleep(random.randint(1, 4))
     with lock:
         while (activeWriter + activeReader) > 0:
             waitingWriter += 1
-            #socketio.emit('my_response', {'data': 'write wait', 'count': waitingWriter})
+            socketio.emit('reader_data', "waiting writer action")
             conditionwrite.wait()
             waitingWriter -= 1
         activeWriter += 1
-    #socketio.emit('my_response', {'data': 'writer write', 'count': activeWriter})
     hotelCommit(booking, length_booked)
+    writerMessage = "Writer Action: " + booking + ", " + str(length_booked)
+    socketio.emit('reader_data', writerMessage)
     time.sleep(random.randint(2, 4))
     with lock:
         activeWriter -= 1
         if waitingWriter > 0:
+
             conditionwrite.notify()
         else:
             conditionread.notify_all()
@@ -208,21 +214,29 @@ def my_event(message):
     emit('my_response',
          {'data': message['data'], 'count': session['receive_count']})
 
+# generates 10 random readers and 5 random writers
 @socketio.event
 def reader_writer_test():
-    ''' old test code not compatible with changes, don't use
-    threads = []
-    for _ in range(10):
-        threads.append(threading.Thread(target=readers))
+    with ThreadPoolExecutor() as executor:
+        future = executor.submit(readers)
+        hotelchoices, hotelbookings = future.result()
 
-    for _ in range(5):
-        threads.append(threading.Thread(target=writers))
+    hotelNum = len(hotelchoices)
+    randomNums = []
 
-    for i in threads:
-        i.start()
-    '''
+    with ThreadPoolExecutor() as executor:
+        for _ in range(10):
+            randomHotel2 = random.choice(hotelchoices)
+            executor.submit(readers, randomHotel2)
 
-# event for connecting to database
+
+        for i in range(hotelNum):
+            randomNum = random.randint(10, 30)
+            randomNums.append(randomNum)
+            executor.submit(writers, hotelchoices[i], randomNum)
+            executor.submit(maintain_booking, hotelchoices[i], randomNums[i])
+
+
 @socketio.event
 def connect():
     '''
@@ -231,13 +245,6 @@ def connect():
         if thread is None:
             thread = socketio.start_background_task(background_thread)
     '''
-
-    threads = []
-    for _ in range(5):
-        threads.append(threading.Thread(target=writers))
-
-    for i in threads:
-        i.start()
     emit('my_response', {'data': 'Connected', 'count': 0})
 
 
@@ -264,11 +271,9 @@ def reader_ping():
 def maintain_booking(booking, length_booked):
     time.sleep(int(length_booked))
     with app.app_context():
-        ### CRITICAL SECTION -->
-        with ThreadPoolExecutor() as executor:
-            length_booked = 0
-            future = executor.submit(writers(booking, length_booked))
-        ### CRITICAL SECTION <--
+    ### CRITICAL SECTION -->
+        writers(booking, 0)
+    ### CRITICAL SECTION <--
         print("finished thread\n",file=sys.stderr)
   
 
@@ -324,7 +329,7 @@ def create():
             if booking in hotelchoices: 
                 ### CRITICAL SECTION -->
                 with ThreadPoolExecutor() as executor:
-                    future = executor.submit(writers, booking, length_booked)
+                    executor.submit(writers, booking, length_booked)
                 ### CRITICAL SECTION <--
 
                 # now we wait for the length of the booking, then make hotel available again
