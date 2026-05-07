@@ -42,7 +42,7 @@ flask run --port 8080
 
 ## Ian's Role: 
 
-<p>Ian please info on role here - set up readers/writers</p>
+<p>Primarily worked on implementation of reader and writer logic and proper usage and synchronization of readers and writers. Set up a Test Readers and Writers button to generate 10 readers and a writer for each room for demonstration of simulated logic. Add usage of readers and writers to relevant functions of the web server with readers threads generated whenever a read operation is sent to the database to retrieve room information and writer threads when a booking is made with an update operation.</p>
 
 ## References
 
