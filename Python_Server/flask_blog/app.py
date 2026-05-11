@@ -231,7 +231,14 @@ def reader_writer_test():
 
 @socketio.event
 def connect():
-    emit('my_response', {'data': 'Connected', 'count': 0})
+    emit('my_response', {'data': 'Connect', 'count': 0})
+
+#test connection
+@socketio.event
+def my_connection(message):
+    session['receive_count'] = session.get('receive_count', 0) + 1
+    emit('my_response',
+         {'data': message['data'], 'count': session['receive_count']})
 
 @socketio.event
 def disconnect_request():
