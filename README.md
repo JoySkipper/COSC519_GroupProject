@@ -30,6 +30,20 @@ finally, navigate to the flask_blog/ directory and run the following command:
 ```
 flask run --port 8080
 ```
+You should see something similar to the following: 
+
+```
+INFO:werkzeug:WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:8080
+INFO:werkzeug:Press CTRL+C to quit
+```
+
+You may then open an internet browser and navigate to:
+
+```
+http://127.0.0.1:8080
+```
+
 
 ## Summary of Participant Roles
 
