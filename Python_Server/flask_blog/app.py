@@ -27,16 +27,13 @@ logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 app.config['DEBUG'] = True
 
-# Generate a nice key using secrets.token_urlsafe()
 app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", 'pf9Wkove4IKEAXvy-cQkeDPhv9Cb3Ag-wyJILbq_dFw')
-# Generate a good salt for password hashing using: secrets.SystemRandom().getrandbits(128)
 app.config['SECURITY_PASSWORD_SALT'] = os.environ.get("SECURITY_PASSWORD_SALT", '146585145368132386173505678016728509634')
 
-# have session and remember cookie be samesite (flask/flask_login)
 app.config["REMEMBER_COOKIE_SAMESITE"] = "strict"
 app.config["SESSION_COOKIE_SAMESITE"] = "strict"
 
-# Use an in-memory db
+
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://'
 
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
@@ -45,9 +42,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 
-# Set this variable to "threading", "eventlet" or "gevent" to test the
-# different async modes, or leave it set to None for the application to choose
-# the best option based on installed packages.
+# async mode options are "threading", "eventlet" or "gevent". We use threading since we are multithreading
 async_mode = threading
 
 socketio = SocketIO(app, async_mode="threading", logger=True, engineio_logger=True)
@@ -58,11 +53,12 @@ db = SQLAlchemy(app)
 # Define models
 fsqla.FsModels.set_db_info(db)
 
-#### begin new section
 
 #create engine
 engine = db.create_engine("sqlite://", echo=True)
 meta = db.MetaData()
+
+#create threading variables
 thread_lock = Lock()
 thread = None
 reading = threading.Lock()
@@ -135,9 +131,8 @@ def hotelCommit(booking, length_booked):
         hotelname.length_booked = length_booked
         db.session.commit()
 
-
+# runs in background to emit server sent data
 def background_thread():
-    """Example of how to send server generated events to clients."""
     count = 0
     while True:
         socketio.sleep(10)
@@ -211,12 +206,7 @@ def writers(booking, length_booked):
             else:
                 conditionread.notify_all()
 
-# log event
-@socketio.event
-def my_event(message):
-    session['receive_count'] = session.get('receive_count', 0) + 1
-    emit('my_response',
-         {'data': message['data'], 'count': session['receive_count']})
+
 
 # generates 10 random readers and 5 random writers
 @socketio.event
@@ -313,6 +303,7 @@ def create():
     with ThreadPoolExecutor() as executor:
         future = executor.submit(readers)
         hotelchoices = future.result()[0]
+        bookingvalues = future.result()[1]
     ### CRITICAL SECTION <--
     
     if request.method == 'POST':
@@ -324,8 +315,15 @@ def create():
         else:
             booking = result.get("hotelname")
             length_booked = result.get("hnumber")
+            
 
-            if booking in hotelchoices: 
+            if (booking in hotelchoices): 
+                which_hotel = hotelchoices.index(booking)
+                hotelbooked = bookingvalues[which_hotel]
+            else:  
+                return render_template("index.html", result="That hotel is not in our system.")
+
+            if (booking in hotelchoices) and (hotelbooked == "0"): 
                 ### CRITICAL SECTION -->
                 with ThreadPoolExecutor() as executor:
                     executor.submit(writers, booking, length_booked)
@@ -338,9 +336,8 @@ def create():
                 #t2 = threading.Thread(target=maintain_booking(booking, length_booked))
                 t.start()
                 #t2.start()
-
             else: 
-                flash('Hotel not in system')
+                return render_template("index.html", result="That room is already booked! Please try again.")
 
             return render_template("result.html", result=result)
         
