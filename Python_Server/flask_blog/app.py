@@ -54,10 +54,6 @@ db = SQLAlchemy(app)
 fsqla.FsModels.set_db_info(db)
 
 
-#create engine
-engine = db.create_engine("sqlite://", echo=True)
-meta = db.MetaData()
-
 #create threading variables
 thread_lock = Lock()
 thread = None
